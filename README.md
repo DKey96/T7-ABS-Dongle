@@ -14,3 +14,7 @@
 ### hw module
 
 - This module contains list of Arduino modules used in combination with Arduino Nano, and electronic components + schematic used for development of custom board which can be direct replacement for other ABS dongles.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
