@@ -1,5 +1,11 @@
 # Hardware Parts
 
+- There are 2 options to create the dongle with:
+1. Arduino Nano + Arduino modules
+1. Custom Board (not fully finished as the PCB design is missing, electronics schema is done)
+
+Both versions are described bellow:
+
 ## Arduino Modules
 
 - Project was developed on Arduino Nano due to its small dimensions and the fact, that the project itself does not need a powerfull chip nor many of I/O pins.
