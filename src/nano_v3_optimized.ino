@@ -17,7 +17,7 @@ const byte absOffStationary[6] PROGMEM = { 0x00, 0x01, 0x00, 0x00, 0x00, 0x1D };
 const byte absOffDriving[6] PROGMEM = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x1D };
 
 const byte absOnMsg[6] PROGMEM = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-const byte rearAbsOnMsg[6] PROGMEM = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
+const byte rearAbsOffMsg[6] PROGMEM = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
 const byte absOffMsg[6] PROGMEM = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x02 };
 
 const unsigned long absId = 0x268;
@@ -109,7 +109,7 @@ void setup() {
 
     switch (result) {
       case 0x00: memcpy_P(canMsg, absOnMsg, 6); break;
-      case 0x01: memcpy_P(canMsg, rearAbsOnMsg, 6); break;
+      case 0x01: memcpy_P(canMsg, rearAbsOffMsg, 6); break;
       case 0x02: memcpy_P(canMsg, absOffMsg, 6); break;
     }
 
@@ -146,7 +146,7 @@ void loop() {
           }
         } else if (rxBuf[0] == 0x00) {
           if (buttonMsgCounter > 0 && buttonMsgCounter <= 20 && !buttonMsgSent && lastState[5] == 0x01 && lastState[5] != 0x1D) {
-            sendAbsCanMessage(rearAbsOnMsg);
+            sendAbsCanMessage(rearAbsOffMsg);
             Serial.println(buttonMsgCounter);
             buttonMsgSent = true;
           }
