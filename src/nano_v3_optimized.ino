@@ -30,6 +30,7 @@ const byte absInitMsg[6] PROGMEM = { 0x00, 0x01, 0x00, 0x00, 0x00, 0x11 };
 const int eepromAddress = 0;
 
 byte lastState[6];
+byte canMsg[6];
 
 byte checkSavedData(byte savedData[6]) {
   switch (savedData[5]) {
