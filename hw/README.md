@@ -13,7 +13,7 @@ Both versions are described bellow:
 
 ### Used Arduino modules
 
-- [Step-down convertor (12V -> 5V/3A)](https://www.sparkfun.com/products/21255) &#8592; Converts battery voltage to voltage used by the components and controller
+- [Step-down convertor (12V -> 7.6V/3A)](https://www.sparkfun.com/products/21255) &#8592; Converts battery voltage to voltage used by the components and controller. We want the output of the Step-Down to be between 7-8V, ideally 7.6V, as Arduino nano has its own voltage regulator. This will stabilize the voltage and current even if the battery will give more. 
 - [MCP2551 CAN Bus module](https://www.elektor.com/products/can-module-mcp2515) &#8592; CAN-bus receiver + tranceiver module used to intercept and manipulate the communication on the CAN bus itself via the OBD connector
 
 ### Connection Diagram
