@@ -14,23 +14,23 @@ const int eepromAddress = 0;
 
 const byte absOnMsg[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 const byte absOffMsg[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x1C};
+const byte buttonPressMsg[1] = {0x80}; // Button press message
+const float delayMs = 4;
 
 enum AbsState { ABS_ON, ABS_OFF };
 AbsState currentState = ABS_ON;
 
 byte lastState[6];    // Holds the last state read from EEPROM
-unsigned long previousMillis = 0;
-const unsigned long messageTimeout = 1000; // 1-second timeout
 
 void sendAbsCanMessage(const byte* dataToSend, size_t length) {
-    Serial.println("Sending ABS message:");
+    Serial.println("Sending CAN message:");
     for (byte i = 0; i < length; i++) {
         Serial.print(dataToSend[i], HEX);
         Serial.print(" ");
     }
     Serial.println();
 
-    for (int i = 0; i < 25; i++) {
+    for (int i = 0; i < 500; i++) {
         if (CAN.sendMsgBuf(canId, 0, length, dataToSend) == CAN_OK) {
             Serial.print("Message sent [");
             Serial.print(i + 1);
@@ -38,7 +38,7 @@ void sendAbsCanMessage(const byte* dataToSend, size_t length) {
         } else {
             Serial.println("Error sending message...");
         }
-        delay(1);  // Short delay to prevent flooding
+        delay(delayMs);  // Short delay to prevent flooding
     }
 }
 
@@ -48,7 +48,7 @@ void processAbsStateChange(AbsState state) {
             Serial.println("ABS ON by default. No state change required.");
             break;
         case ABS_OFF:
-            sendAbsCanMessage(absOffMsg, sizeof(absOffMsg));
+            sendAbsCanMessage(buttonPressMsg, sizeof(buttonPressMsg));
             break;
     }
 }
@@ -68,11 +68,12 @@ void restoreLastSavedState() {
 
     if (lastState[5] == 0x1C) { // ABS OFF
         currentState = ABS_OFF;
+        Serial.println("Restored state: ABS OFF");
         sendAbsCanMessage(absOffMsg, sizeof(absOffMsg)); // Send ABS OFF message
-        byte buttonPressMsg[1] = {0x80}; // Button press message
-        sendAbsCanMessage(buttonPressMsg, 1); // Send button press
+        sendAbsCanMessage(buttonPressMsg, 1);           // Send button press message
     } else { // Default to ABS ON
         currentState = ABS_ON;
+        Serial.println("Restored state: ABS ON");
     }
 
     processAbsStateChange(currentState);
