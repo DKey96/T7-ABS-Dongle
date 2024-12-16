@@ -7,13 +7,13 @@
 
 MCP_CAN CAN(CAN_CS_PIN);
 
-const unsigned long canId = 0x226;
+const unsigned long canId = 0x2A0;
 const unsigned long absId = 0x268;    // ABS ECU ID
 const unsigned long absInit = 0x18;  // Initialization byte
 const int eepromAddress = 0;
 
-const byte absOnMsg[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-const byte absOffMsg[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x1C};
+const byte absOnMsg[6] = {0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
+const byte absOffMsg[6] = {0x00, 0x01, 0x00, 0x00, 0x00, 0x1C};
 const byte buttonPressMsg[1] = {0x80}; // Button press message
 const float delayMs = 4;
 
@@ -34,7 +34,7 @@ void sendAbsCanMessage(const byte* dataToSend, size_t length) {
         if (CAN.sendMsgBuf(canId, 0, length, dataToSend) == CAN_OK) {
             Serial.print("Message sent [");
             Serial.print(i + 1);
-            Serial.println("/25]");
+            Serial.println("/500]");
         } else {
             Serial.println("Error sending message...");
         }
@@ -48,7 +48,6 @@ void processAbsStateChange(AbsState state) {
             Serial.println("ABS ON by default. No state change required.");
             break;
         case ABS_OFF:
-            sendAbsCanMessage(buttonPressMsg, sizeof(buttonPressMsg));
             break;
     }
 }
@@ -69,7 +68,6 @@ void restoreLastSavedState() {
     if (lastState[5] == 0x1C) { // ABS OFF
         currentState = ABS_OFF;
         Serial.println("Restored state: ABS OFF");
-        sendAbsCanMessage(absOffMsg, sizeof(absOffMsg)); // Send ABS OFF message
         sendAbsCanMessage(buttonPressMsg, 1);           // Send button press message
     } else { // Default to ABS ON
         currentState = ABS_ON;
