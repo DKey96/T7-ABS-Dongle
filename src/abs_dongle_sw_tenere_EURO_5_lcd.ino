@@ -16,7 +16,8 @@ const byte rearAbsOffMsg[6] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
 const byte absOffMsg[6] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 0x02};
 
 const int eepromAddress = 0;
-const unsigned long messageTimeout = 1000;
+const unsigned long messageInterval = 4;
+const byte dataLength = 7;
 
 enum AbsState { ABS_ON, ABS_OFF, REAR_ABS_OFF };
 AbsState currentState = ABS_ON;
@@ -36,10 +37,15 @@ byte readSavedData(byte* savedData) {
 }
 
 void updateEepromIfChanged(const byte* newData, size_t length) {
+    bool dataChanged = false;
     for (size_t i = 0; i < length; i++) {
         if (EEPROM.read(eepromAddress + i) != newData[i]) {
             EEPROM.update(eepromAddress + i, newData[i]);
+            dataChanged = true;
         }
+    }
+    if (dataChanged == true) {
+      Serial.println("EEPROM updated");
     }
 }
 
@@ -51,15 +57,17 @@ void sendAbsCanMessage(const byte* dataToSend, size_t length) {
     }
     Serial.println();
 
+    bool success = false;
     for (int i = 0; i < 25; i++) {
-        if (CAN.sendMsgBuf(canId, 0, length, dataToSend) == CAN_OK) {
-            Serial.print("Message sent [");
-            Serial.print(i + 1);
-            Serial.println("/25]");
-        } else {
-            Serial.println("Error sending message...");
-        }
-        delay(1);
+      if (CAN.sendMsgBuf(canId, 0, dataLength, dataToSend) == CAN_OK) {
+        success = true;
+      }
+      delay(messageInterval);
+    }
+    if (success == true){
+      Serial.println("Message sent...");
+    } else {
+      Serial.println("Error sending message...");
     }
 }
 
@@ -80,10 +88,12 @@ void processAbsStateChange(AbsState state) {
 
 void restoreLastSavedState() {
     byte savedState = readSavedData(lastState);
+    Serial.println("Saved state:");
+    Serial.println(savedState, HEX);
     switch (savedState) {
-        case 0x00: currentState = ABS_ON; break;
-        case 0x01: currentState = REAR_ABS_OFF; break;
-        case 0x02: currentState = ABS_OFF; break;
+        case 0x01: currentState = ABS_ON; break;
+        case 0x1B: currentState = REAR_ABS_OFF; break;
+        case 0x1D: currentState = ABS_OFF; break;
         default: return; // Invalid state, do nothing
     }
     processAbsStateChange(currentState);
@@ -113,30 +123,36 @@ void loop() {
         if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK) {
             if (rxId == absId) {
                 byte requiredByte = rxBuf[5];
-                if (requiredByte != lastState[5]) {
-                    updateEepromIfChanged(rxBuf, len);
+                byte currentByte = lastState[5];
+
+                // Check if the received value is 0x11 (binary 0100011)
+                if (requiredByte == 0x11) {
+                    Serial.println("Received 0100011 (0x11), sending last saved ABS state:");
+                    delay(3000); // Sleep for 3 seconds before sending
+                    restoreLastSavedState();
+                } else if (requiredByte != currentByte && requiredByte != 0x1A) {
+                    Serial.println("State has changed, updating EEPROM...");
+                    updateEepromIfChanged(rxBuf, dataLength);
+                    Serial.println(requiredByte, HEX);
                     lastState[5] = requiredByte;
-                    processAbsStateChange((AbsState)requiredByte);
+                } else if (requiredByte == 0x1A){
+                  delay(1000);
+                  processAbsStateChange((AbsState)currentByte);
                 }
             } else if (rxId == absButton) {
-                unsigned long now = millis();
                 if (rxBuf[0] == 0x80) {
-                    buttonMsgCounter++;
-                    buttonLastReceived = now;
-                    if (buttonMsgCounter > 35 && !buttonMsgSent) {
-                        processAbsStateChange(ABS_OFF);
-                        buttonMsgSent = true;
-                    }
+                  buttonMsgCounter++;
+                  if (buttonMsgCounter > 50 && !buttonMsgSent) {
+                    processAbsStateChange(ABS_OFF);
+                    buttonMsgSent = true;
+                  }
                 } else if (rxBuf[0] == 0x00) {
-                    if (buttonMsgCounter > 0 && !buttonMsgSent) {
-                        processAbsStateChange(REAR_ABS_OFF);
-                    }
-                    buttonMsgCounter = 0;
-                    buttonMsgSent = false;
-                }
-                if (now - buttonLastReceived > messageTimeout) {
-                    buttonMsgCounter = 0;
-                    buttonMsgSent = false;
+                  if (buttonMsgCounter > 0 && buttonMsgCounter <= 50 && !buttonMsgSent && lastState[5] != 0x00) {
+                    processAbsStateChange(REAR_ABS_OFF);
+                    buttonMsgSent = true;
+                  }
+                  buttonMsgCounter = 0;
+                  buttonMsgSent = false;
                 }
             }
         }
