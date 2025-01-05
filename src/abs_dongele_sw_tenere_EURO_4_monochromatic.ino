@@ -9,7 +9,6 @@ MCP_CAN CAN(CAN_CS_PIN);
 
 const unsigned long canId = 0x2A0;
 const unsigned long absId = 0x268;    // ABS ECU ID
-const unsigned long engineId = 0x20A; // ECU ECU ID
 
 const unsigned long absInit = 0x18;  // Initialization byte
 const int eepromAddress = 0;
@@ -18,16 +17,10 @@ const byte absOnMsg[6] = {0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
 const byte absOffMsg[6] = {0x00, 0x01, 0x00, 0x00, 0x00, 0x1C};
 const byte buttonPressMsg[1] = {0x80}; // Button press message
 
-const byte killSwitchByte = 0x02; // When killing the bike with the kill switch
-const byte starterSwitchByte = 0x80; // When starting the bike over the started switch
-
 const float delayMs = 4;
 
 enum AbsState { ABS_ON, ABS_OFF };
 AbsState currentState = ABS_ON;
-
-enum EngineState { ENGINE_ON, ENGINE_OFF };
-EngineState currentEngineState = ENGINE_OFF;
 
 byte lastState[6];    // Holds the last state read from EEPROM
 
@@ -137,34 +130,23 @@ void loop() {
         byte rxBuf[8];
 
         if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK) {
-            if (rxId == absId && currentEngineState == ENGINE_ON) {
+            if (rxId == absId) {
                 byte requiredByte = rxBuf[5];
                 byte currentByte = lastState[5];
 
                 if (requiredByte == absInit) {
                     Serial.println("Received ABS initialization. Sending saved state...");
+                    delay(3000); // Sleep for 3 seconds before sending
                     restoreLastSavedState();
                 } else if (requiredByte != currentByte && requiredByte != 0x1A) {
                     Serial.println("State change detected. Updating EEPROM...");
                     updateEepromIfChanged(rxBuf, len);
-                    memcpy(lastState, rxBuf, len);
-
-                    currentState = (currentByte == 0x1C) ? ABS_OFF : ABS_ON;
-                    processAbsStateChange(currentState);
+                    Serial.println(requiredByte, HEX);
+                    lastState[5] = requiredByte;
                 } else if (requiredByte == 0x1A) {
                     Serial.println("Received 0x1A. Sending last saved ABS state...");
+                    delay(1000);
                     processAbsStateChange((AbsState)currentByte);
-                }
-            } else if (rxId == engineId) {
-                byte engineButtonMsg = rxBuf[7];
-                if (engineButtonMsg == killSwitchByte) {
-                    currentEngineState = ENGINE_OFF;
-                    Serial.println("Kill switch pressed. Setting engine state to OFF.");
-                } else if (engineButtonMsg == starterSwitchByte && currentEngineState == ENGINE_OFF) {
-                    currentEngineState = ENGINE_ON;
-                    Serial.println("Starter switch pressed or engine state already OFF. Setting engine state to ON.");
-                    currentState = (lastState[5] == 0x1C) ? ABS_OFF : ABS_ON;
-                    processAbsStateChange(currentState);
                 }
             }
         }
