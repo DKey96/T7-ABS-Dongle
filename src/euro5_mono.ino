@@ -18,12 +18,17 @@ const byte absOffMsg[6] = {0x00, 0x01, 0x00, 0x00, 0x00, 0x1C};
 const byte buttonPressMsg[1] = {0x80}; // Button press message
 
 const float delayMs = 4;
+const unsigned long initializationTimeoutMs = 10000;
 
 enum AbsState { ABS_ON, ABS_OFF };
 AbsState currentState = ABS_ON;
 
 byte lastState[6];    // Holds the last state read from EEPROM
 bool stateRestored = false;
+
+bool hasAbsStateByte(byte length) {
+    return length >= sizeof(lastState);
+}
 
 void sendAbsCanMessage(const byte* dataToSend, size_t length) {
     Serial.println("Sending CAN message:");
@@ -49,7 +54,7 @@ void sendAbsCanMessage(const byte* dataToSend, size_t length) {
             byte len = 0;
             byte rxBuf[8];
 
-            if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK && rxId == absId && rxBuf[5] == 0x30) {
+            if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK && rxId == absId && hasAbsStateByte(len) && rxBuf[5] == 0x30) {
                 Serial.println("Detected ABS message 0x30. Stopping button press messages.");
                 return;
             }
@@ -90,21 +95,6 @@ void restoreLastSavedState() {
     }
 
     processAbsStateChange(currentState);
-    Serial.println("Waiting for initialization message to disappear...");
-    while (true) {
-        if (!digitalRead(CAN_INT_PIN)) {
-            unsigned long rxId;
-            byte len = 0;
-            byte rxBuf[8];
-
-            if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK) {
-                if (rxId == absId && rxBuf[5] != absInit) {
-                    Serial.println("Initialization message disappeared. Setup complete.");
-                    break;
-                }
-            }
-        }
-    }
 }
 
 void updateEepromIfChanged(const byte* newData, size_t length) {
@@ -122,6 +112,7 @@ void updateEepromIfChanged(const byte* newData, size_t length) {
 
 void setup() {
     Serial.begin(115200);
+    pinMode(CAN_INT_PIN, INPUT);
 
     if (CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK) {
         Serial.println("MCP2515 Initialized Successfully!");
@@ -133,39 +124,25 @@ void setup() {
     CAN.setMode(MCP_NORMAL);
 
     Serial.println("Waiting for ABS initialization...");
-    bool absInitialized = false;
-    while (!absInitialized) {
+    unsigned long waitStartedAt = millis();
+    while (!stateRestored && millis() - waitStartedAt < initializationTimeoutMs) {
         if (!digitalRead(CAN_INT_PIN)) {
             unsigned long rxId;
             byte len = 0;
             byte rxBuf[8];
 
-            if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK && rxId == absId && rxBuf[5] == absInit) {
+            if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK && rxId == absId && hasAbsStateByte(len) && rxBuf[5] == absInit) {
                 Serial.println("Received initialization message. Restoring state...");
                 delay(1000);
                 restoreLastSavedState();
-                absInitialized = true;
-                break;
+                stateRestored = true;
             }
         }
     }
 
-    Serial.println("Waiting for initialization message to disappear...");
-    while (true) {
-        if (!digitalRead(CAN_INT_PIN)) {
-            unsigned long rxId;
-            byte len = 0;
-            byte rxBuf[8];
-
-            if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK) {
-                if (rxId == absId && rxBuf[5] != absInit) {
-                    Serial.println("Initialization message disappeared. Setup complete.");
-                    break;
-                }
-            }
-        }
+    if (!stateRestored) {
+        Serial.println("ABS initialization timed out. Continuing to listen...");
     }
-    stateRestored = true;
     Serial.println("Listening for CAN messages...");
 }
 
@@ -176,7 +153,7 @@ void loop() {
         byte rxBuf[8];
 
         if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK) {
-            if (rxId == absId) {
+            if (rxId == absId && hasAbsStateByte(len)) {
                 byte requiredByte = rxBuf[5];
                 byte currentByte = lastState[5];
 
@@ -187,15 +164,15 @@ void loop() {
                     stateRestored = true;
                 } else if (requiredByte != currentByte && requiredByte != 0x1A && requiredByte != 0x30 && requiredByte != absInit) {
                     Serial.println("State change detected. Updating EEPROM...");
-                    updateEepromIfChanged(rxBuf, len);
+                    updateEepromIfChanged(rxBuf, sizeof(lastState));
                     Serial.println(requiredByte, HEX);
                     lastState[5] = requiredByte;
                     stateRestored = false;
                 } else if (requiredByte == 0x1A) {
                     Serial.println("Received 0x1A. Sending last saved ABS state...");
                     delay(1000);
-                    processAbsStateChange((AbsState)currentByte);
-                    stateRestored = false;
+                    restoreLastSavedState();
+                    stateRestored = true;
                 }
             }
         }
