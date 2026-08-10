@@ -24,5 +24,41 @@ int main() {
     assert(observeAbsStatus(invalid, 0x11) == ABS_STATUS_IGNORED);
     assert(invalid.desiredState == 0x1D);
 
+    AbsRestoreState selection = {0x1D, false};
+    beginAbsRestore(selection, 0x1B);
+    assert(selection.desiredState == 0x1B);
+    assert(selection.restorePending);
+
+    beginAbsRestore(selection, 0x18);
+    assert(selection.desiredState == 0x1B);
+    assert(selection.restorePending);
+
+    EEPROM.reset();
+    restoreState = {0x1D, true};
+    lastState[5] = 0x1D;
+    EEPROM.update(eepromAddress + 5, 0x1D);
+
+    byte observed[savedDataLength] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
+    handleObservedAbsState(observed);
+    assert(restoreState.desiredState == 0x1D);
+    assert(restoreState.restorePending);
+    assert(EEPROM.read(eepromAddress + 5) == 0x1D);
+
+    observed[5] = 0x1D;
+    handleObservedAbsState(observed);
+    assert(!restoreState.restorePending);
+    assert(EEPROM.read(eepromAddress + 5) == 0x1D);
+
+    observed[5] = 0x01;
+    handleObservedAbsState(observed);
+    assert(restoreState.desiredState == 0x01);
+    assert(EEPROM.read(eepromAddress + 5) == 0x01);
+
+    saveDesiredAbsState(0x1B);
+    assert(restoreState.desiredState == 0x1B);
+    assert(restoreState.restorePending);
+    assert(lastState[5] == 0x1B);
+    assert(EEPROM.read(eepromAddress + 5) == 0x1B);
+
     return 0;
 }

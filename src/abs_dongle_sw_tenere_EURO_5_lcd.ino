@@ -39,6 +39,14 @@ bool isStableAbsState(byte state) {
     return state == 0x01 || state == 0x1B || state == 0x1D;
 }
 
+void beginAbsRestore(AbsRestoreState& state, byte desiredState) {
+    if (!isStableAbsState(desiredState)) {
+        return;
+    }
+    state.desiredState = desiredState;
+    state.restorePending = true;
+}
+
 AbsStatusAction observeAbsStatus(AbsRestoreState& state, byte observedState) {
     if (!isStableAbsState(observedState)) {
         return ABS_STATUS_IGNORED;
@@ -62,6 +70,7 @@ AbsStatusAction observeAbsStatus(AbsRestoreState& state, byte observedState) {
 
 byte lastState[savedDataLength];
 byte canMsg[dataLength];
+AbsRestoreState restoreState = {0x01, true};
 
 unsigned long buttonLastReceived = 0; // Timestamp of last button message
 int buttonMsgCounter = 0;
@@ -99,6 +108,30 @@ void updateEepromIfChanged(const byte* newData, size_t length) {
     }
     if (dataChanged == true) {
       Serial.println("EEPROM updated");
+    }
+}
+
+void saveDesiredAbsState(byte desiredState) {
+    if (!isStableAbsState(desiredState)) {
+        return;
+    }
+
+    beginAbsRestore(restoreState, desiredState);
+    lastState[savedDataLength - 1] = desiredState;
+    EEPROM.update(eepromAddress + savedDataLength - 1, desiredState);
+}
+
+void handleObservedAbsState(const byte* observedData) {
+    byte observedState = observedData[savedDataLength - 1];
+    AbsStatusAction action = observeAbsStatus(restoreState, observedState);
+
+    if (action == ABS_RESTORE_CONFIRMED) {
+        Serial.println("Restored ABS state confirmed by ECU.");
+    } else if (action == ABS_DESIRED_STATE_CHANGED) {
+        Serial.println("Stable ABS state change detected. Updating EEPROM...");
+        updateEepromIfChanged(observedData, sizeof(lastState));
+        memcpy(lastState, observedData, sizeof(lastState));
+        Serial.println(observedState, HEX);
     }
 }
 
@@ -149,6 +182,7 @@ void restoreLastSavedState() {
         case 0x1D: currentState = ABS_OFF; break;
         default: return; // Invalid state, do nothing
     }
+    beginAbsRestore(restoreState, savedState);
     processAbsStateChange(currentState);
     Serial.println("Restored last saved ABS state.");
 }
@@ -179,32 +213,30 @@ void loop() {
         if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK) {
             if (rxId == absId && hasAbsStateByte(len)) {
                 byte requiredByte = rxBuf[5];
-                byte currentByte = lastState[5];
 
                 // Check if the received value is 0x11 (binary 0100011)
                 if (requiredByte == 0x11) {
                     Serial.println("Received 0100011 (0x11), sending last saved ABS state:");
                     delay(3000); // Sleep for 3 seconds before sending
                     restoreLastSavedState();
-                } else if (requiredByte != currentByte && requiredByte != 0x1A) {
-                    Serial.println("State has changed, updating EEPROM...");
-                    updateEepromIfChanged(rxBuf, sizeof(lastState));
-                    Serial.println(requiredByte, HEX);
-                    lastState[5] = requiredByte;
                 } else if (requiredByte == 0x1A){
                   delay(1000);
                   restoreLastSavedState();
+                } else {
+                  handleObservedAbsState(rxBuf);
                 }
             } else if (rxId == absButton && len >= 1) {
                 buttonLastReceived = millis();
                 if (rxBuf[0] == 0x80) {
                   buttonMsgCounter++;
                   if (buttonMsgCounter > 50 && !buttonMsgSent) {
+                    saveDesiredAbsState(0x1D);
                     processAbsStateChange(ABS_OFF);
                     buttonMsgSent = true;
                   }
                 } else if (rxBuf[0] == 0x00) {
                   if (buttonMsgCounter > 0 && buttonMsgCounter <= 50 && !buttonMsgSent && lastState[5] != 0x00) {
+                    saveDesiredAbsState(0x1B);
                     processAbsStateChange(REAR_ABS_OFF);
                     buttonMsgSent = true;
                   }

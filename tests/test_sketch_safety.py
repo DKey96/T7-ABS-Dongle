@@ -78,8 +78,12 @@ class SketchSafetyTests(unittest.TestCase):
         )
 
     def test_only_initialized_saved_state_bytes_are_written(self):
-        for sketch in (EURO4, EURO5_MONO, EURO5_LCD):
+        for sketch in (EURO4, EURO5_MONO):
             self.assertIn("updateEepromIfChanged(rxBuf, sizeof(lastState))", sketch)
+        self.assertIn(
+            "updateEepromIfChanged(observedData, sizeof(lastState))",
+            EURO5_LCD,
+        )
 
     def test_can_interrupt_pin_is_configured(self):
         for sketch in (EURO4, EURO5_MONO, EURO5_LCD):
