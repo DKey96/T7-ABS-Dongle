@@ -34,6 +34,18 @@ int main() {
     assert(selection.restorePending);
 
     EEPROM.reset();
+    restoreState = {0x01, true};
+    restoreLastSavedState();
+    assert(!restoreState.restorePending);
+
+    byte firstStableState[savedDataLength] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x1B
+    };
+    handleObservedAbsState(firstStableState);
+    assert(restoreState.desiredState == 0x1B);
+    assert(EEPROM.read(eepromAddress + 5) == 0x1B);
+
+    EEPROM.reset();
     restoreState = {0x1D, true};
     lastState[5] = 0x1D;
     EEPROM.update(eepromAddress + 5, 0x1D);

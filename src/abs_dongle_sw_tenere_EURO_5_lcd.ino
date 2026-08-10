@@ -70,7 +70,7 @@ AbsStatusAction observeAbsStatus(AbsRestoreState& state, byte observedState) {
 
 byte lastState[savedDataLength];
 byte canMsg[dataLength];
-AbsRestoreState restoreState = {0x01, true};
+AbsRestoreState restoreState = {0x01, false};
 
 unsigned long buttonLastReceived = 0; // Timestamp of last button message
 int buttonMsgCounter = 0;
@@ -180,7 +180,9 @@ void restoreLastSavedState() {
         case 0x01: currentState = ABS_ON; break;
         case 0x1B: currentState = REAR_ABS_OFF; break;
         case 0x1D: currentState = ABS_OFF; break;
-        default: return; // Invalid state, do nothing
+        default:
+            restoreState.restorePending = false;
+            return; // Invalid state, do nothing
     }
     beginAbsRestore(restoreState, savedState);
     processAbsStateChange(currentState);
