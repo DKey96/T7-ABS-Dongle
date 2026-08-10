@@ -1,6 +1,7 @@
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -107,6 +108,37 @@ class SketchSafetyTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_lcd_restart_state_replay(self):
+        compiler = shutil.which("clang++")
+        if compiler is None:
+            self.skipTest("clang++ is not installed")
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            executable = Path(temporary_directory) / "abs_restore_state_test"
+            compile_result = subprocess.run(
+                [
+                    compiler,
+                    "-std=c++11",
+                    "-include",
+                    str(ROOT / "tests/stubs/ArduinoCompat.h"),
+                    "-I",
+                    str(ROOT / "tests/stubs"),
+                    str(ROOT / "tests/abs_restore_state_test.cpp"),
+                    "-o",
+                    str(executable),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(0, compile_result.returncode, compile_result.stderr)
+
+            run_result = subprocess.run(
+                [str(executable)],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(0, run_result.returncode, run_result.stderr)
 
 
 if __name__ == "__main__":

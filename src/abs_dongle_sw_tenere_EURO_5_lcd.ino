@@ -24,6 +24,42 @@ const byte absOffMsg[dataLength] PROGMEM = {0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 
 enum AbsState { ABS_ON, ABS_OFF, REAR_ABS_OFF };
 AbsState currentState = ABS_ON;
 
+enum AbsStatusAction {
+    ABS_STATUS_IGNORED,
+    ABS_RESTORE_CONFIRMED,
+    ABS_DESIRED_STATE_CHANGED
+};
+
+struct AbsRestoreState {
+    byte desiredState;
+    bool restorePending;
+};
+
+bool isStableAbsState(byte state) {
+    return state == 0x01 || state == 0x1B || state == 0x1D;
+}
+
+AbsStatusAction observeAbsStatus(AbsRestoreState& state, byte observedState) {
+    if (!isStableAbsState(observedState)) {
+        return ABS_STATUS_IGNORED;
+    }
+
+    if (state.restorePending) {
+        if (observedState == state.desiredState) {
+            state.restorePending = false;
+            return ABS_RESTORE_CONFIRMED;
+        }
+        return ABS_STATUS_IGNORED;
+    }
+
+    if (observedState != state.desiredState) {
+        state.desiredState = observedState;
+        return ABS_DESIRED_STATE_CHANGED;
+    }
+
+    return ABS_STATUS_IGNORED;
+}
+
 byte lastState[savedDataLength];
 byte canMsg[dataLength];
 
